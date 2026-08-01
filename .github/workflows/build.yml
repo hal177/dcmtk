@@ -20,7 +20,9 @@ jobs:
     runs-on: large-2404
     container:
       image: ghcr.io/hal177/thirdparty:base-2404
-      token: ${{ secrets.CI_TOKEN_RO }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     permissions:
       contents: read
