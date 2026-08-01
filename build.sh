@@ -38,49 +38,44 @@ readonly STAGE_DIR=$BUILD_DIR/stage
 readonly INSTALL_PREFIX=/opt/pulmera
 
 #----------------------------------------------------------------------
-# Every option that changes what ends up in the packages is set here
-# rather than left to a default, so the contents depend on this file and
-# not on what happens to be installed on the build host.
-#
-# The image codecs and compression backends stay off: the applications
-# read DICOM through DCMTK but do their image work with OpenCV, so
-# pulling in PNG, TIFF, XML and zlib here would add dependencies nothing
-# uses. OpenSSL stays on -- DICOM TLS needs it.
-#
-# The dictionary is built into the library rather than loaded from a
-# file at run time, so a deployment cannot end up with a DCMTK that
-# silently cannot parse tags because a data file was not installed.
 function configure() {
 
     pm::require_commands cmake g++ make git
+
+    # * The image codecs and compression backends off: the applications
+    #   read DICOM through DCMTK but do their image work with OpenCV, so
+    #    pulling in PNG, TIFF, XML and zlib here would add unnecessary deps.
+    # * OpenSSL stays on for TLS
+    # * The dictionary is built into the library.
     
     pm::info "configuring dcmtk in $BUILD_DIR"
     cmake -S "$SOURCE_DIR" -B "$BUILD_DIR" \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX" \
-        -DCMAKE_INSTALL_RPATH='$ORIGIN:$ORIGIN/../lib' \
-        -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
-        -DCMAKE_INSTALL_RPATH_USE_LINK_PATH=OFF \
-        -DBUILD_SHARED_LIBS=ON \
-        -DBUILD_APPS=ON \
-        -DDCMTK_ENABLE_STL=ON \
-        -DDCMTK_ENABLE_CXX11=ON \
-        -DDCMTK_ENABLE_PRIVATE_TAGS=ON \
-        -DDCMTK_DEFAULT_DICT=builtin \
-        -DDCMTK_ENABLE_BUILTIN_DICTIONARY=ON \
-        -DDCMTK_ENABLE_EXTERNAL_DICTIONARY=OFF \
-        -DDCMTK_WITH_OPENSSL=ON \
-        -DDCMTK_WITH_ZLIB=OFF \
-        -DDCMTK_WITH_PNG=OFF \
-        -DDCMTK_WITH_TIFF=OFF \
-        -DDCMTK_WITH_XML=OFF \
-        -DDCMTK_WITH_SNDFILE=OFF \
-        -DDCMTK_WITH_ICONV=OFF \
-        -DDCMTK_WITH_ICU=OFF \
-        -DDCMTK_WITH_WRAP=OFF \
-        -DDCMTK_WITH_DOXYGEN=OFF \
-        -DDCMTK_ENABLE_MANPAGES=OFF \
-        -DBUILD_DOCUMENTATION=OFF
+          -DCMAKE_BUILD_TYPE=Release \
+	  -DCMAKE_CXX_FLAGS="-fPIC -s -flto" \
+          -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX" \
+          -DCMAKE_INSTALL_RPATH='$ORIGIN:$ORIGIN/../lib' \
+          -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
+          -DCMAKE_INSTALL_RPATH_USE_LINK_PATH=OFF \
+          -DBUILD_SHARED_LIBS=ON \
+          -DBUILD_APPS=ON \
+          -DDCMTK_ENABLE_STL=ON \
+          -DDCMTK_ENABLE_CXX11=ON \
+          -DDCMTK_ENABLE_PRIVATE_TAGS=ON \
+          -DDCMTK_DEFAULT_DICT=builtin \
+          -DDCMTK_ENABLE_BUILTIN_DICTIONARY=ON \
+          -DDCMTK_ENABLE_EXTERNAL_DICTIONARY=OFF \
+          -DDCMTK_WITH_OPENSSL=ON \
+          -DDCMTK_WITH_ZLIB=OFF \
+          -DDCMTK_WITH_PNG=OFF \
+          -DDCMTK_WITH_TIFF=OFF \
+          -DDCMTK_WITH_XML=OFF \
+          -DDCMTK_WITH_SNDFILE=OFF \
+          -DDCMTK_WITH_ICONV=OFF \
+          -DDCMTK_WITH_ICU=OFF \
+          -DDCMTK_WITH_WRAP=OFF \
+          -DDCMTK_WITH_DOXYGEN=OFF \
+          -DDCMTK_ENABLE_MANPAGES=OFF \
+          -DBUILD_DOCUMENTATION=OFF
 }
 
 #----------------------------------------------------------------------
