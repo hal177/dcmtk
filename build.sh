@@ -1,0 +1,125 @@
+#!/bin/bash
+######################################################################
+## Build DCMTK and package it into debians:
+##
+##   pulmera-dcmtk       runtime: the versioned shared libraries
+##   pulmera-dcmtk-dev   SDK: headers, cmake files, the command line tools
+##
+######################################################################
+set -euo pipefail
+
+readonly PROJECT_DIR=$(readlink -f "$(dirname "$0")")
+
+#----------------------------------------------------------------------
+# Shared scripts live in the thirdparty repository, pinned by ref.
+# Keep the thirdparty clone on the same level as the thirdparty repo
+# clones, so that it can be reused.
+readonly COMMON_DIR="$PROJECT_DIR/common"
+readonly COMMON_REF=packaging
+
+if [[ ! -r $COMMON_DIR/packaging.bash ]]; then
+    url="git@github.com:hal177/thirdparty.git"
+    if ! git clone --depth 1 --branch "$COMMON_REF" "$url" "$COMMON_DIR"; then
+        echo " ** ERROR: failed to clone thirdparty at $COMMON_DIR" >&2
+        exit 1
+    fi
+fi
+if [[ ! -L $COMMON_DIR ]]; then
+    git -C "$COMMON_DIR" checkout "$COMMON_REF"
+    git -C "$COMMON_DIR" pull
+fi
+source "$COMMON_DIR/packaging.bash"
+
+#----------------------------------------------------------------------
+readonly SOURCE_DIR=$PROJECT_DIR/src
+readonly BUILD_DIR=$PROJECT_DIR/build
+readonly STAGE_DIR=$BUILD_DIR/stage
+
+readonly INSTALL_PREFIX=/opt/pulmera
+
+#----------------------------------------------------------------------
+# Every option that changes what ends up in the packages is set here
+# rather than left to a default, so the contents depend on this file and
+# not on what happens to be installed on the build host.
+#
+# The image codecs and compression backends stay off: the applications
+# read DICOM through DCMTK but do their image work with OpenCV, so
+# pulling in PNG, TIFF, XML and zlib here would add dependencies nothing
+# uses. OpenSSL stays on -- DICOM TLS needs it.
+#
+# The dictionary is built into the library rather than loaded from a
+# file at run time, so a deployment cannot end up with a DCMTK that
+# silently cannot parse tags because a data file was not installed.
+function configure() {
+
+    pm::require_commands cmake g++ make git
+    
+    pm::info "configuring dcmtk in $BUILD_DIR"
+    cmake -S "$SOURCE_DIR" -B "$BUILD_DIR" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX" \
+        -DCMAKE_INSTALL_RPATH='$ORIGIN:$ORIGIN/../lib' \
+        -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
+        -DCMAKE_INSTALL_RPATH_USE_LINK_PATH=OFF \
+        -DBUILD_SHARED_LIBS=ON \
+        -DBUILD_APPS=ON \
+        -DDCMTK_ENABLE_STL=ON \
+        -DDCMTK_ENABLE_CXX11=ON \
+        -DDCMTK_ENABLE_PRIVATE_TAGS=ON \
+        -DDCMTK_DEFAULT_DICT=builtin \
+        -DDCMTK_ENABLE_BUILTIN_DICTIONARY=ON \
+        -DDCMTK_ENABLE_EXTERNAL_DICTIONARY=OFF \
+        -DDCMTK_WITH_OPENSSL=ON \
+        -DDCMTK_WITH_ZLIB=OFF \
+        -DDCMTK_WITH_PNG=OFF \
+        -DDCMTK_WITH_TIFF=OFF \
+        -DDCMTK_WITH_XML=OFF \
+        -DDCMTK_WITH_SNDFILE=OFF \
+        -DDCMTK_WITH_ICONV=OFF \
+        -DDCMTK_WITH_ICU=OFF \
+        -DDCMTK_WITH_WRAP=OFF \
+        -DDCMTK_WITH_DOXYGEN=OFF \
+        -DDCMTK_ENABLE_MANPAGES=OFF \
+        -DBUILD_DOCUMENTATION=OFF
+}
+
+#----------------------------------------------------------------------
+function build() {
+    pm::info "building dcmtk with $(nproc) jobs"
+    cmake --build "$BUILD_DIR" --parallel "$(nproc)"
+
+    pm::info "installing into the staging root $STAGE_DIR"
+    rm -rf "$STAGE_DIR"
+    DESTDIR="$STAGE_DIR" cmake --install "$BUILD_DIR"
+}
+
+#----------------------------------------------------------------------
+function package() {
+    # How the installed tree is split between the two packages. Everything
+    # installed has to be matched by one list or the other.
+    PACKAGE_PREFIX="$INSTALL_PREFIX"
+    PACKAGE_STAGE_DIR="$STAGE_DIR"
+
+    PACKAGE_RUNTIME_PATTERNS=(
+	'lib/lib*.so.*'          # versioned shared objects and soname links
+	'bin'                    # storescu, dcmdump and the rest of the tools
+	'etc'                    # storescp.cfg and friends, read at run time
+	'share/dcmtk*'           # data files the tools read
+    )
+    PACKAGE_DEV_PATTERNS=(
+	'include'                # dcmtk/... headers
+	'lib/lib*.so'            # unversioned link-time symlinks
+	'lib/cmake'              # DCMTKConfig.cmake, for find_package(DCMTK)
+	'lib/pkgconfig'          # dcmtk.pc
+	'share/doc'              # licence and copyright texts
+    )
+
+    pm::create_packages
+    pm::info "Done packaging: $(ls -1 "$PACKAGE_OUTPUT_DIR"/*.deb)"
+}
+
+#======================================================================
+configure
+build
+package
+

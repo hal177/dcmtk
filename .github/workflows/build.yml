@@ -1,0 +1,61 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - 3.X.X
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Which revision of the shared build scripts to use. build.sh names the
+  # same ref in COMMON_REF for local runs; keep the two in step.
+  COMMON_REF: packaging
+
+jobs:
+  build:
+    runs-on: large-2404
+    container:
+      image: ghcr.io/hal177/thirdparty:base-2404
+      token: ${{ secrets.CI_TOKEN_RO }}
+
+    permissions:
+      contents: read
+      packages: read
+
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # Shared build and packaging scripts (common.bash, packaging.bash).
+      - name: Checkout common scripts
+        uses: actions/checkout@v4
+        with:
+          repository: hal177/thirdparty
+          ref: ${{ env.COMMON_REF }}
+          path: common
+          token: ${{ secrets.CI_TOKEN_RO }}
+          fetch-depth: 1
+
+      #**********************************************************************
+      - name: Build and package
+        run: ./build.sh
+      #**********************************************************************
+
+      # upload-artifact@v4 runs from the VM, not the container, so the
+      # files must live under the shared workspace.
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: pulmera-dcmtk-debs
+          path: dist/*.deb
+          if-no-files-found: error
