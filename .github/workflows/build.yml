@@ -25,7 +25,7 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
 
     permissions:
-      contents: read
+      contents: write   # create releases
       packages: read
 
     defaults:
@@ -45,12 +45,20 @@ jobs:
           repository: hal177/thirdparty
           ref: ${{ env.COMMON_REF }}
           path: common
-          token: ${{ secrets.CI_TOKEN_RO }}
+          token: ${{ secrets.THIRDPARTY_READONLY_TOKEN }}
           fetch-depth: 1
+
+      # In a container job the checked-out workspace is owned by a different
+      # uid than the container's root user, so git refuses to read it
+      # ("dubious ownership") and the package version lookup (git rev-parse
+      # HEAD, in packaging.bash) fails. Trust it explicitly.
+      - name: Trust the workspace for git
+        run: git config --global --add safe.directory '*'
 
       #**********************************************************************
       - name: Build and package
         run: ./build.sh
+        timeout-minutes: 60
       #**********************************************************************
 
       # upload-artifact@v4 runs from the VM, not the container, so the
@@ -61,3 +69,15 @@ jobs:
           name: pulmera-dcmtk-debs
           path: dist/*.deb
           if-no-files-found: error
+
+      # Publish the .debs to a Release tagged v<version>, the durable place
+      # the image builds and developers pull them from (the artifact above
+      # is only kept ~90 days). Runs only for a real version branch build.
+      - name: Publish release
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.ref_name }}
+          name: pulmera-dcmtk ${{ github.ref_name }}
+          files: dist/*.deb
+          fail_on_unmatched_files: true

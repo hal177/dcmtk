@@ -17,7 +17,7 @@ readonly PROJECT_DIR=$(readlink -f "$(dirname "$0")")
 readonly COMMON_DIR="$PROJECT_DIR/common"
 readonly COMMON_REF=packaging
 
-if [[ ! -r $COMMON_DIR/packaging.bash ]]; then
+if [[ ! -r $COMMON_DIR/scripts/packaging.bash ]]; then
     url="git@github.com:hal177/thirdparty.git"
     if ! git clone --depth 1 --branch "$COMMON_REF" "$url" "$COMMON_DIR"; then
         echo " ** ERROR: failed to clone thirdparty at $COMMON_DIR" >&2
@@ -28,7 +28,7 @@ if [[ ! -L $COMMON_DIR ]]; then
     git -C "$COMMON_DIR" checkout "$COMMON_REF"
     git -C "$COMMON_DIR" pull
 fi
-source "$COMMON_DIR/packaging.bash"
+source "$COMMON_DIR/scripts/packaging.bash"
 
 #----------------------------------------------------------------------
 readonly SOURCE_DIR=$PROJECT_DIR/src
@@ -95,6 +95,11 @@ function package() {
     PACKAGE_PREFIX="$INSTALL_PREFIX"
     PACKAGE_STAGE_DIR="$STAGE_DIR"
 
+    # What the built libraries load at run time. packaging.bash derives
+    # nothing, so this list is the whole truth.
+    PACKAGE_RUNTIME_DEPENDENCIES="libc6, libgcc-s1, libssl3t64, libstdc++6"
+    PACKAGE_DEV_DEPENDENCIES="$PACKAGE_RUNTIME_DEPENDENCIES"
+
     PACKAGE_RUNTIME_PATTERNS=(
 	'lib/lib*.so.*'          # versioned shared objects and soname links
 	'bin'                    # storescu, dcmdump and the rest of the tools
@@ -102,7 +107,12 @@ function package() {
 	'share/dcmtk*'           # data files the tools read
     )
     PACKAGE_DEV_PATTERNS=(
+	'lib/lib*.so.*'          # its own copy of the libraries, so the SDK
+	                         # stands alone and versions coexist
 	'include'                # dcmtk/... headers
+	'bin'                    # DCMTKTargets.cmake exports these as imported
+	                         # targets, so the SDK needs its own copies or
+	                         # find_package fails on a missing file
 	'lib/lib*.so'            # unversioned link-time symlinks
 	'lib/cmake'              # DCMTKConfig.cmake, for find_package(DCMTK)
 	'lib/pkgconfig'          # dcmtk.pc
