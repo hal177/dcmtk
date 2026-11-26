@@ -1,5 +1,9 @@
 name: Build
 
+# An unofficial build (an experiment, other flags): the debs are a short-lived
+# artifact. Official releases (v<version>) are built and published by
+# hal177/thirdparty's Build package workflow, from packages/<lib>.
+
 on:
   push:
     branches:
@@ -25,7 +29,7 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
 
     permissions:
-      contents: write   # create releases
+      contents: read
       packages: read
 
     defaults:
@@ -69,15 +73,4 @@ jobs:
           name: pulmera-dcmtk-debs
           path: dist/*.deb
           if-no-files-found: error
-
-      # Publish the .debs to a Release tagged v<version>, the durable place
-      # the image builds and developers pull them from (the artifact above
-      # is only kept ~90 days). Runs only for a real version branch build.
-      - name: Publish release
-        if: github.event_name != 'pull_request'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ github.ref_name }}
-          name: pulmera-dcmtk ${{ github.ref_name }}
-          files: dist/*.deb
-          fail_on_unmatched_files: true
+          retention-days: 14
